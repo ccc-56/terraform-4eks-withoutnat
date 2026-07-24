@@ -44,8 +44,13 @@ terraform/
 ```
 
 The two stacks are decoupled: `02-workloads` discovers the cluster and ECR repo
-by name via data sources, so no shared remote state is required. State is local
-by default — see `backend.tf` in each stack to switch to S3.
+by name via data sources, so no shared remote state is required. Both stacks
+use an **S3 backend** (`backend.tf`) — bucket `url-shortern-eks-tfstate` in
+`ap-southeast-1`, created by the `00-backend` bootstrap stack (run first).
+
+If a stack already has local state (e.g. it was applied before adding the S3
+backend), migrate it after the bucket exists with:
+`terraform init -migrate-state`.
 
 ## Prerequisites
 
@@ -55,6 +60,17 @@ by default — see `backend.tf` in each stack to switch to S3.
   Kubernetes admin automatically).
 
 ## Deploy
+
+### 0. State backend bucket (run once)
+
+The `01-infra` / `02-workloads` stacks store state in S3, so create the bucket
+first. This bootstrap stack keeps its own state local.
+
+```bash
+cd terraform/environments/production/00-backend
+terraform init
+terraform apply
+```
 
 ### 1. Infrastructure (VPC + EKS + ECR)
 
