@@ -124,6 +124,25 @@ When the ALB is provisioned, open the app:
 terraform output -raw load_balancer_hostname   # http://<hostname>/
 ```
 
+## CI/CD (GitHub Actions)
+
+- `.github/workflows/terraform-ci.yml` — on every PR touching `terraform/**`,
+  runs `terraform fmt -check` + `validate` for all three stacks (no AWS creds).
+- `.github/workflows/deploy.yml` — manual (**Actions → deploy → Run workflow**),
+  with an `action` input (`plan` or `apply`). Runs the stages in order:
+  `00-backend → 01-infra → build & push image → 02-workloads`.
+
+Set these repo secrets first (Settings → Secrets and variables → Actions):
+
+| Secret | Purpose |
+| --- | --- |
+| `AWS_ACCESS_KEY_ID` | IAM identity with VPC/EKS/IAM/ECR/ELB/S3 permissions |
+| `AWS_SECRET_ACCESS_KEY` | matching secret key |
+
+The deploy jobs use a `production` GitHub Environment, so you can add a required
+reviewer there to gate `apply`. `plan` presumes the state bucket (and, for
+`02-workloads`, the cluster) already exist — run `apply` for a first-time bootstrap.
+
 ## Notes / cost
 
 - No NAT gateway is the main cost saving; the only always-on hourly costs are
