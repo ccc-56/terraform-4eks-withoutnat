@@ -1,0 +1,136 @@
+name: deploy
+
+# Manual, ordered deploy of the whole stack:
+#   00-backend (state bucket) -> 01-infra (VPC/EKS/ECR) -> image -> 02-workloads
+#
+# Requires repo secrets:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+# (an IAM identity with VPC/EKS/IAM/ECR/ELB/S3 permissions).
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "plan or apply"
+        type: choice
+        options: [plan, apply]
+        default: plan
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: "ap-southeast-1"
+  TF_VERSION: "1.9.8"
+  APP_REPO: "ccc-56/URL-shortern"
+  ECR_REPO: "urls/app"
+  IMAGE_TAG: "latest"
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: terraform ${{ inputs.action }}
+        working-directory: terraform/environments/production/00-backend
+        run: |
+          terraform init
+          if [ "${{ inputs.action }}" = "apply" ]; then
+            terraform apply -auto-approve
+          else
+            terraform plan
+          fi
+
+  infra:
+    needs: backend
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: terraform ${{ inputs.action }}
+        working-directory: terraform/environments/production/01-infra
+        run: |
+          terraform init
+          if [ "${{ inputs.action }}" = "apply" ]; then
+            terraform apply -auto-approve -var-file=terraform.tfvars
+          else
+            terraform plan -var-file=terraform.tfvars
+          fi
+
+  image:
+    needs: infra
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: skip on plan
+        if: inputs.action != 'apply'
+        run: echo "action=plan; skipping image build/push"
+
+      - uses: actions/checkout@v4
+        if: inputs.action == 'apply'
+        with:
+          repository: ${{ env.APP_REPO }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: inputs.action == 'apply'
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        if: inputs.action == 'apply'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: build & push
+        if: inputs.action == 'apply'
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/${ECR_REPO}:${IMAGE_TAG}"
+          docker build -f Dockerfile-app -t "$IMAGE" .
+          docker push "$IMAGE"
+
+  workloads:
+    needs: [infra, image]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: terraform ${{ inputs.action }}
+        working-directory: terraform/environments/production/02-workloads
+        run: |
+          terraform init
+          if [ "${{ inputs.action }}" = "apply" ]; then
+            terraform apply -auto-approve -var-file=terraform.tfvars
+          else
+            terraform plan -var-file=terraform.tfvars
+          fi
