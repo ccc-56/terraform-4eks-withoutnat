@@ -38,7 +38,7 @@ variable "cluster_name" {
 
 variable "cluster_version" {
   type    = string
-  default = "1.30"
+  default = "1.34"
 }
 
 variable "public_access_cidrs" {
