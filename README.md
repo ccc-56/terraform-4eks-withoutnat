@@ -1,1 +1,119 @@
 # terraform-4eks-withoutnat
+
+Terraform to deploy the [URL-shortern](https://github.com/ccc-56/URL-shortern) project on **Amazon EKS** with a deliberately cheap, **NAT-gateway-free** topology: the VPC has **only public subnets**, and every resource (EKS nodes and all workloads) lives in them.
+
+- Region: `ap-southeast-1`
+- VPC CIDR: `10.74.0.0/16`
+- No NAT gateway (nodes get public IPs and route to the internet via the Internet Gateway)
+
+## Architecture
+
+```
+Internet
+   |
+   v
+Classic ELB  (Service type=LoadBalancer, internet-facing, public subnets)
+   |
+   v
+nginx pods            static frontend + reverse proxy
+   |  /api/, /r/
+   v
+app pods (shortname-app:3000)   Node.js + Express URL shortener
+   |
+   v
+redis pod (redis:6379)          in-cluster Redis (plaintext)
+```
+
+Everything runs on an EKS managed node group placed in the two public subnets.
+There is no NAT gateway, so the EKS control-plane endpoint is public and the
+nodes reach ECR / the API over the Internet Gateway.
+
+## Layout
+
+```
+terraform/
+  modules/
+    network/     public-only VPC: subnets, IGW, public route table (no NAT)
+    eks/         EKS cluster, managed node group, IAM roles, core add-ons
+    workloads/   Kubernetes: namespace, redis, app, nginx + LoadBalancer
+  environments/
+    production/
+      01-infra/      network + EKS + ECR  (AWS provider)
+      02-workloads/  Kubernetes objects   (kubernetes provider from cluster data)
+```
+
+The two stacks are decoupled: `02-workloads` discovers the cluster and ECR repo
+by name via data sources, so no shared remote state is required. State is local
+by default — see `backend.tf` in each stack to switch to S3.
+
+## Prerequisites
+
+- Terraform >= 1.5, AWS CLI, `kubectl`, and Docker
+- AWS credentials for `ap-southeast-1` with permissions for VPC/EKS/IAM/ECR/ELB
+- The same IAM identity should run both stacks (the cluster creator is granted
+  Kubernetes admin automatically).
+
+## Deploy
+
+### 1. Infrastructure (VPC + EKS + ECR)
+
+```bash
+cd terraform/environments/production/01-infra
+terraform init
+terraform apply -var-file=terraform.tfvars
+```
+
+Note the outputs, then point kubectl at the cluster:
+
+```bash
+aws eks update-kubeconfig --region ap-southeast-1 --name url-shortener-eks
+```
+
+### 2. Build & push the app image to ECR
+
+The `urls/app` ECR repo is created by stage 1. Build the app image from the
+[URL-shortern](https://github.com/ccc-56/URL-shortern) repo and push it:
+
+```bash
+ECR_URL=$(terraform -chdir=terraform/environments/production/01-infra output -raw ecr_repository_url)
+aws ecr get-login-password --region ap-southeast-1 \
+  | docker login --username AWS --password-stdin "${ECR_URL%/*}"
+
+git clone https://github.com/ccc-56/URL-shortern.git
+cd URL-shortern
+docker build -f Dockerfile-app -t "$ECR_URL:latest" .
+docker push "$ECR_URL:latest"
+```
+
+The nginx tier uses the stock `nginx:alpine` image; the frontend and proxy
+config are injected via ConfigMaps, so no custom nginx image is needed.
+
+### 3. Workloads (redis + app + nginx)
+
+```bash
+cd terraform/environments/production/02-workloads
+terraform init
+terraform apply -var-file=terraform.tfvars
+```
+
+When the ELB is provisioned, open the app:
+
+```bash
+terraform output -raw load_balancer_hostname   # http://<hostname>/
+```
+
+## Notes / cost
+
+- No NAT gateway is the main cost saving; the only always-on hourly costs are
+  the EKS control plane, the node group EC2 instances, and one Classic ELB.
+- Public-subnet nodes are simpler and cheaper but less isolated than a
+  private-subnet + NAT design. Lock down `public_access_cidrs` and the node
+  security group for anything beyond a demo.
+- Redis runs in-cluster without persistence; use ElastiCache for durability.
+
+## Teardown
+
+```bash
+terraform -chdir=terraform/environments/production/02-workloads destroy -var-file=terraform.tfvars
+terraform -chdir=terraform/environments/production/01-infra     destroy -var-file=terraform.tfvars
+```
