@@ -2,6 +2,22 @@ data "aws_ecr_repository" "app" {
   name = var.app_repo_name
 }
 
+# OIDC provider (created by 01-infra) used for the controller's IRSA role.
+data "aws_iam_openid_connect_provider" "this" {
+  url = data.aws_eks_cluster.this.identity[0].oidc[0].issuer
+}
+
+# AWS Load Balancer Controller: turns the Ingress below into an internet-facing ALB.
+module "alb_controller" {
+  source = "../../../modules/alb-controller"
+
+  cluster_name      = var.cluster_name
+  region            = var.region
+  vpc_id            = data.aws_eks_cluster.this.vpc_config[0].vpc_id
+  oidc_provider_arn = data.aws_iam_openid_connect_provider.this.arn
+  oidc_provider_url = replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")
+}
+
 module "workloads" {
   source = "../../../modules/workloads"
 
@@ -17,4 +33,7 @@ module "workloads" {
 
   nginx_image    = var.nginx_image
   nginx_replicas = var.nginx_replicas
+
+  # The Ingress needs the controller running before an ALB can be provisioned.
+  depends_on = [module.alb_controller]
 }

@@ -269,9 +269,6 @@ resource "kubernetes_service_v1" "nginx" {
   metadata {
     name      = "nginx"
     namespace = kubernetes_namespace_v1.this.metadata[0].name
-    # No annotations: the in-tree AWS cloud provider provisions an
-    # internet-facing Classic ELB in the tagged public subnets, so no extra
-    # AWS Load Balancer Controller install is required.
   }
 
   spec {
@@ -282,6 +279,44 @@ resource "kubernetes_service_v1" "nginx" {
       target_port = 80
     }
 
-    type = "LoadBalancer"
+    # ClusterIP: the public entrypoint is the ALB created by the Ingress below.
+    type = "ClusterIP"
+  }
+}
+
+# Internet-facing ALB provisioned by the AWS Load Balancer Controller.
+resource "kubernetes_ingress_v1" "this" {
+  metadata {
+    name      = "url-shortener"
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+
+    annotations = {
+      "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"      = "ip"
+      "alb.ingress.kubernetes.io/listen-ports"     = jsonencode([{ HTTP = 80 }])
+      "alb.ingress.kubernetes.io/healthcheck-path" = "/"
+    }
+  }
+
+  spec {
+    ingress_class_name = "alb"
+
+    rule {
+      http {
+        path {
+          path      = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = kubernetes_service_v1.nginx.metadata[0].name
+              port {
+                number = 80
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }

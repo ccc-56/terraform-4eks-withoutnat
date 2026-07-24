@@ -17,3 +17,12 @@ output "cluster_version" {
 output "node_role_arn" {
   value = aws_iam_role.node.arn
 }
+
+output "oidc_provider_arn" {
+  value = aws_iam_openid_connect_provider.this.arn
+}
+
+output "oidc_provider_url" {
+  description = "OIDC issuer URL without the https:// scheme (for IRSA trust conditions)."
+  value       = replace(aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")
+}

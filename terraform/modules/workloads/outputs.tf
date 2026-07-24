@@ -3,6 +3,6 @@ output "namespace" {
 }
 
 output "load_balancer_hostname" {
-  description = "Public hostname of the nginx LoadBalancer. Point your CNAME here."
-  value       = try(kubernetes_service_v1.nginx.status[0].load_balancer[0].ingress[0].hostname, "")
+  description = "Public ALB hostname from the Ingress. Point your CNAME here."
+  value       = try(kubernetes_ingress_v1.this.status[0].load_balancer[0].ingress[0].hostname, "")
 }

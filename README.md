@@ -12,10 +12,10 @@ Terraform to deploy the [URL-shortern](https://github.com/ccc-56/URL-shortern) p
 Internet
    |
    v
-Classic ELB  (Service type=LoadBalancer, internet-facing, public subnets)
+ALB  (Ingress, internet-facing, public subnets, via AWS Load Balancer Controller)
    |
    v
-nginx pods            static frontend + reverse proxy
+nginx pods (ClusterIP)   static frontend + reverse proxy
    |  /api/, /r/
    v
 app pods (shortname-app:3000)   Node.js + Express URL shortener
@@ -33,13 +33,14 @@ nodes reach ECR / the API over the Internet Gateway.
 ```
 terraform/
   modules/
-    network/     public-only VPC: subnets, IGW, public route table (no NAT)
-    eks/         EKS cluster, managed node group, IAM roles, core add-ons
-    workloads/   Kubernetes: namespace, redis, app, nginx + LoadBalancer
+    network/         public-only VPC: subnets, IGW, public route table (no NAT)
+    eks/             EKS cluster, node group, IAM roles, add-ons, OIDC provider
+    alb-controller/  AWS Load Balancer Controller (IRSA IAM role + Helm release)
+    workloads/       Kubernetes: namespace, redis, app, nginx + ALB Ingress
   environments/
     production/
       01-infra/      network + EKS + ECR  (AWS provider)
-      02-workloads/  Kubernetes objects   (kubernetes provider from cluster data)
+      02-workloads/  ALB controller + Kubernetes objects (kubernetes/helm providers)
 ```
 
 The two stacks are decoupled: `02-workloads` discovers the cluster and ECR repo
@@ -88,6 +89,11 @@ docker push "$ECR_URL:latest"
 The nginx tier uses the stock `nginx:alpine` image; the frontend and proxy
 config are injected via ConfigMaps, so no custom nginx image is needed.
 
+Stage 3 installs the AWS Load Balancer Controller (via Helm, with an IRSA role)
+and creates an `alb`-class Ingress, so the public entrypoint is an internet-facing
+**ALB** (not a Classic ELB). The controller uses `target-type: ip`, sending
+traffic straight to the nginx pod IPs (works because the VPC CNI gives pods VPC IPs).
+
 ### 3. Workloads (redis + app + nginx)
 
 ```bash
@@ -96,7 +102,7 @@ terraform init
 terraform apply -var-file=terraform.tfvars
 ```
 
-When the ELB is provisioned, open the app:
+When the ALB is provisioned, open the app:
 
 ```bash
 terraform output -raw load_balancer_hostname   # http://<hostname>/
@@ -105,7 +111,7 @@ terraform output -raw load_balancer_hostname   # http://<hostname>/
 ## Notes / cost
 
 - No NAT gateway is the main cost saving; the only always-on hourly costs are
-  the EKS control plane, the node group EC2 instances, and one Classic ELB.
+  the EKS control plane, the node group EC2 instances, and one ALB.
 - Public-subnet nodes are simpler and cheaper but less isolated than a
   private-subnet + NAT design. Lock down `public_access_cidrs` and the node
   security group for anything beyond a demo.
