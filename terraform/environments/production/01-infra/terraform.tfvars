@@ -21,7 +21,7 @@ project_name = "url-shortener"
 
 cluster_name = "url-shortener-eks"
 
-cluster_version = "1.30"
+cluster_version = "1.34"
 
 node_instance_types = ["t3.small"]
 node_desired_size   = 2
