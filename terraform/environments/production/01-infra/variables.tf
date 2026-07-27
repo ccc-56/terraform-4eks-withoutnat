@@ -10,7 +10,7 @@ variable "vpc_name" {
 
 variable "vpc_cidr" {
   type    = string
-  default = "10.74.0.0/16"
+  default = "10.76.0.0/16"
 }
 
 variable "azs" {

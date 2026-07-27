@@ -3,7 +3,7 @@
 Terraform to deploy the [URL-shortern](https://github.com/ccc-56/URL-shortern) project on **Amazon EKS** with a deliberately cheap, **NAT-gateway-free** topology: the VPC has **only public subnets**, and every resource (EKS nodes and all workloads) lives in them.
 
 - Region: `ap-southeast-1`
-- VPC CIDR: `10.74.0.0/16`
+- VPC CIDR: `10.76.0.0/16`
 - No NAT gateway (nodes get public IPs and route to the internet via the Internet Gateway)
 
 ## Architecture
