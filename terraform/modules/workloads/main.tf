@@ -320,3 +320,43 @@ resource "kubernetes_ingress_v1" "this" {
     }
   }
 }
+
+# Host-based Ingress: its own ALB, whose Route53 record external-dns creates
+# from the `host` rule (hence no external-dns annotations are needed here).
+resource "kubernetes_ingress_v1" "hostname" {
+  count = var.ingress_hostname == "" ? 0 : 1
+
+  metadata {
+    name      = var.hostname_ingress_name
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+
+    annotations = {
+      "alb.ingress.kubernetes.io/scheme"      = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type" = "ip"
+    }
+  }
+
+  spec {
+    ingress_class_name = "alb"
+
+    rule {
+      host = var.ingress_hostname
+
+      http {
+        path {
+          path      = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = kubernetes_service_v1.nginx.metadata[0].name
+              port {
+                number = 80
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -57,3 +57,15 @@ variable "nginx_replicas" {
   type    = number
   default = 2
 }
+
+variable "ingress_hostname" {
+  description = "DNS name for the host-based Ingress; external-dns publishes it to Route53. Empty disables that Ingress."
+  type        = string
+  default     = ""
+}
+
+variable "external_dns_domain_filters" {
+  description = "Restrict external-dns to these hosted zones; empty means all zones in the account."
+  type        = list(string)
+  default     = []
+}

@@ -18,6 +18,16 @@ module "alb_controller" {
   oidc_provider_url = replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")
 }
 
+# external-dns: publishes Route53 records for Ingress/Service hostnames.
+module "external_dns" {
+  source = "../../../modules/external-dns"
+
+  cluster_name      = var.cluster_name
+  oidc_provider_arn = data.aws_iam_openid_connect_provider.this.arn
+  oidc_provider_url = replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")
+  domain_filters    = var.external_dns_domain_filters
+}
+
 module "workloads" {
   source = "../../../modules/workloads"
 
@@ -33,6 +43,8 @@ module "workloads" {
 
   nginx_image    = var.nginx_image
   nginx_replicas = var.nginx_replicas
+
+  ingress_hostname = var.ingress_hostname
 
   # The Ingress needs the controller running before an ALB can be provisioned.
   depends_on = [module.alb_controller]

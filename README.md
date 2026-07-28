@@ -36,11 +36,13 @@ terraform/
     network/         public-only VPC: subnets, IGW, public route table (no NAT)
     eks/             EKS cluster, node group, IAM roles, add-ons, OIDC provider
     alb-controller/  AWS Load Balancer Controller (IRSA IAM role + Helm release)
+    external-dns/    external-dns (IRSA IAM role + Helm release, AWS/Route53 provider)
     workloads/       Kubernetes: namespace, redis, app, nginx + ALB Ingress
   environments/
     production/
       01-infra/      network + EKS + ECR  (AWS provider)
-      02-workloads/  ALB controller + Kubernetes objects (kubernetes/helm providers)
+      02-workloads/  ALB controller + external-dns + Kubernetes objects
+                     (kubernetes/helm providers)
 ```
 
 The two stacks are decoupled: `02-workloads` discovers the cluster and ECR repo
@@ -55,7 +57,7 @@ backend), migrate it after the bucket exists with:
 ## Prerequisites
 
 - Terraform >= 1.5, AWS CLI, `kubectl`, and Docker
-- AWS credentials for `ap-southeast-1` with permissions for VPC/EKS/IAM/ECR/ELB
+- AWS credentials for `ap-southeast-1` with permissions for VPC/EKS/IAM/ECR/ELB/Route53
 - The same IAM identity should run both stacks (the cluster creator is granted
   Kubernetes admin automatically).
 
@@ -124,6 +126,27 @@ When the ALB is provisioned, open the app:
 terraform output -raw load_balancer_hostname   # http://<hostname>/
 ```
 
+### 4. DNS (external-dns)
+
+Stage 3 also installs **external-dns**, which watches Ingresses/Services and
+keeps Route53 in sync (`--policy=sync`, TXT registry owned by the cluster name).
+Setting `ingress_hostname` creates a second, host-based Ingress
+(`url-shortener-ing1`) with its own ALB; external-dns then publishes the
+A/AAAA alias records for that hostname:
+
+```hcl
+# terraform/environments/production/02-workloads/terraform.tfvars
+ingress_hostname            = "apin1.dongzh.store"
+external_dns_domain_filters = ["dongzh.store"]   # limit external-dns to this zone
+```
+
+```bash
+terraform output -raw ingress_hostname   # http://apin1.dongzh.store/
+```
+
+The Route53 hosted zone itself is not managed here — it must already exist in
+the account. Leave `ingress_hostname` empty to skip the host-based Ingress.
+
 ## CI/CD (GitHub Actions)
 
 - `.github/workflows/terraform-ci.yml` — on every PR touching `terraform/**`,
@@ -136,7 +159,7 @@ Set these repo secrets first (Settings → Secrets and variables → Actions):
 
 | Secret | Purpose |
 | --- | --- |
-| `AWS_ACCESS_KEY_ID` | IAM identity with VPC/EKS/IAM/ECR/ELB/S3 permissions |
+| `AWS_ACCESS_KEY_ID` | IAM identity with VPC/EKS/IAM/ECR/ELB/S3/Route53 permissions |
 | `AWS_SECRET_ACCESS_KEY` | matching secret key |
 
 The deploy jobs use a `production` GitHub Environment, so you can add a required
