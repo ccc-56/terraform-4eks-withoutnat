@@ -42,3 +42,14 @@ variable "nginx_replicas" {
   type    = number
   default = 2
 }
+
+variable "ingress_hostname" {
+  description = "DNS name for the host-based Ingress; external-dns creates the Route53 record. Empty disables that Ingress."
+  type        = string
+  default     = ""
+}
+
+variable "hostname_ingress_name" {
+  type    = string
+  default = "url-shortener-ing1"
+}

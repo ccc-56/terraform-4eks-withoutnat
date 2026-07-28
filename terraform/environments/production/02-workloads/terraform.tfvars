@@ -15,3 +15,7 @@ redis_port  = 6379
 
 nginx_image    = "nginx:alpine"
 nginx_replicas = 2
+
+# Host-based Ingress; external-dns creates apin1.dongzh.store in Route53.
+ingress_hostname            = "apin1.dongzh.store"
+external_dns_domain_filters = ["dongzh.store"]
