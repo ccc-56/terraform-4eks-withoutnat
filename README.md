@@ -147,6 +147,14 @@ terraform output -raw ingress_hostname   # http://apin1.dongzh.store/
 The Route53 hosted zone itself is not managed here — it must already exist in
 the account. Leave `ingress_hostname` empty to skip the host-based Ingress.
 
+### 5. Monitoring (optional)
+
+`monitoring/install.sh` installs kube-prometheus-stack and the Grafana /
+Prometheus / node-exporter / kube-state-metrics Ingresses on the cluster — see
+[`monitoring/README.md`](monitoring/README.md). Run `monitoring/uninstall.sh`
+before destroying `01-infra`, otherwise its ALBs are orphaned and block the VPC
+deletion.
+
 ## CI/CD (GitHub Actions)
 
 - `.github/workflows/terraform-ci.yml` — on every PR touching `terraform/**`,
