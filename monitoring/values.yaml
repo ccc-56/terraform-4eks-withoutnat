@@ -1,0 +1,25 @@
+# Helm values for kube-prometheus-stack.
+# The live install used the chart defaults, so this file only pins the choices
+# that matter for this cluster; everything else comes from the chart.
+#
+# Note: no persistent volume is requested, so Prometheus/Grafana data is lost
+# whenever the pods are recreated. Set the *.persistence / storageSpec blocks
+# below (and keep the aws-ebs-csi-driver add-on installed) to keep history.
+
+prometheus:
+  prometheusSpec:
+    retention: 10d
+    # storageSpec:
+    #   volumeClaimTemplate:
+    #     spec:
+    #       storageClassName: gp2
+    #       accessModes: ["ReadWriteOnce"]
+    #       resources:
+    #         requests:
+    #           storage: 20Gi
+
+grafana:
+  # grafana.ini defaults are fine; the admin password is generated into the
+  # <release>-grafana secret on first install.
+  persistence:
+    enabled: false
