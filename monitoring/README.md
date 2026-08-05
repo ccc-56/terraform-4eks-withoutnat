@@ -1,6 +1,6 @@
 # Monitoring stack (Prometheus + Grafana)
 
-`kube-prometheus-stack` on the `url-shortener-eks` cluster, exposed through four
+`kube-prometheus-stack` on the `url-shortener-eks` cluster, exposed through two
 host-based ALB Ingresses. external-dns publishes the Route53 records, so the
 endpoints come up on their own once the Ingresses are created.
 
@@ -8,8 +8,10 @@ endpoints come up on their own once the Ingresses are created.
 | --- | --- | --- |
 | `grafana1.dongzh.store` | `monitoring-grafana` | 80 |
 | `prom1.dongzh.store` | `monitoring-kube-prometheus-prometheus` | 9090 |
-| `node1.dongzh.store` | `monitoring-prometheus-node-exporter` | 9100 |
-| `pod1.dongzh.store` | `monitoring-kube-state-metrics` | 8080 |
+
+node-exporter and kube-state-metrics are not exposed publicly: Prometheus
+scrapes them in-cluster, and every extra Ingress costs another ALB (~$0.65/day).
+Query their metrics through `prom1` instead.
 
 ## Install
 
