@@ -150,7 +150,7 @@ the account. Leave `ingress_hostname` empty to skip the host-based Ingress.
 ### 5. Monitoring (optional)
 
 `monitoring/install.sh` installs kube-prometheus-stack and the Grafana /
-Prometheus / node-exporter / kube-state-metrics Ingresses on the cluster — see
+Prometheus Ingresses on the cluster — see
 [`monitoring/README.md`](monitoring/README.md). Run `monitoring/uninstall.sh`
 before destroying `01-infra`, otherwise its ALBs are orphaned and block the VPC
 deletion.

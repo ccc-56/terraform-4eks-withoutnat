@@ -28,7 +28,7 @@ kubectl apply -f "$SCRIPT_DIR/ingresses.yaml"
 echo
 echo "Waiting for the ALBs to be provisioned..."
 kubectl wait --namespace "$NAMESPACE" --for=jsonpath='{.status.loadBalancer.ingress[0].hostname}' \
-  --timeout=5m ingress/grafana-ing1 ingress/prom-ing1 ingress/node-ing1 ingress/pod-ing1
+  --timeout=5m ingress/grafana-ing1 ingress/prom-ing1
 
 kubectl get ingress -n "$NAMESPACE"
 echo
