@@ -25,6 +25,7 @@ jobs:
           - terraform/environments/production/00-backend
           - terraform/environments/production/01-infra
           - terraform/environments/production/02-workloads
+          - terraform/environments/production/03-bastion
     steps:
       - uses: actions/checkout@v4
 

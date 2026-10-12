@@ -1,0 +1,32 @@
+#!/bin/bash
+# Installs AWS CLI v2, kubectl (matching the cluster minor), helm and k9s,
+# then writes a kubeconfig for the ubuntu user.
+set -euxo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update -y
+apt-get install -y unzip curl jq git bash-completion
+
+cd /tmp
+curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
+unzip -q awscliv2.zip
+./aws/install
+
+KUBECTL_VERSION=$(curl -fsSL https://dl.k8s.io/release/stable-${cluster_version}.txt)
+curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/$${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+chmod +x /usr/local/bin/kubectl
+
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+curl -fsSL https://github.com/derailed/k9s/releases/latest/download/k9s_Linux_amd64.tar.gz | tar -xz -C /usr/local/bin k9s
+
+sudo -u ubuntu -H aws eks update-kubeconfig --region ${region} --name ${cluster_name}
+
+cat >> /home/ubuntu/.bashrc <<'RC'
+source <(kubectl completion bash)
+alias k=kubectl
+complete -o default -F __start_kubectl k
+source <(helm completion bash)
+RC
+
+touch /var/lib/cloud/bastion-ready
